@@ -1,118 +1,94 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Mini Virtual DOM</title>
-  </head>
-  <body>
-    <div id="root"></div>
+<div id="app"></div>
 
-    <script>
-      // สร้าง Virtual DOM node
-      function h(type, props, ...children) {
-        return { type, props: props || {}, children };
+<script>
+  // === Virtual DOM base ===
+  function h(type, props, ...children) {
+    return { type, props: props || {}, children };
+  }
+
+  function createElement(vnode) {
+    if (typeof vnode === "string") return document.createTextNode(vnode);
+
+    const el = document.createElement(vnode.type);
+
+    for (let [k, v] of Object.entries(vnode.props || {})) {
+      if (k.startsWith("on") && typeof v === "function") {
+        el.addEventListener(k.substring(2).toLowerCase(), v);
+      } else {
+        el.setAttribute(k, v);
       }
+    }
 
-      // สร้าง DOM จริงจาก VDOM
-      function createElement(vnode) {
-        if (typeof vnode === "string") {
-          return document.createTextNode(vnode);
-        }
+    vnode.children.forEach(c => el.appendChild(createElement(c)));
+    return el;
+  }
 
-        const el = document.createElement(vnode.type);
+  function updateElement(parent, newNode, oldNode, index = 0) {
+    const existing = parent.childNodes[index];
 
-        for (let [key, value] of Object.entries(vnode.props || {})) {
-          el.setAttribute(key, value);
-        }
+    if (!newNode && existing) return parent.removeChild(existing);
+    if (newNode && !oldNode) return parent.appendChild(createElement(newNode));
+    if (
+      typeof newNode !== typeof oldNode ||
+      (newNode.type !== oldNode.type)
+    ) {
+      return parent.replaceChild(createElement(newNode), existing);
+    }
+    if (typeof newNode === "string" && newNode !== oldNode) {
+      existing.nodeValue = newNode;
+      return;
+    }
 
-        vnode.children.forEach(child => {
-          el.appendChild(createElement(child));
-        });
+    const newProps = newNode.props || {};
+    const oldProps = oldNode.props || {};
 
-        return el;
-      }
-
-      // เปรียบเทียบและอัปเดต DOM
-      function updateElement(parent, newNode, oldNode, index = 0) {
-        const existing = parent.childNodes[index];
-
-        if (!newNode && oldNode && existing) {
-          parent.removeChild(existing);
-          return;
-        }
-
-        if (newNode && !oldNode) {
-          parent.appendChild(createElement(newNode));
-          return;
-        }
-
-        if (
-          typeof newNode !== typeof oldNode ||
-          (typeof newNode !== "string" && newNode.type !== oldNode.type)
-        ) {
-          parent.replaceChild(createElement(newNode), existing);
-          return;
-        }
-
-        if (typeof newNode === "string" && newNode !== oldNode) {
-          existing.nodeValue = newNode;
-          return;
-        }
-
-        const newProps = newNode.props || {};
-        const oldProps = oldNode.props || {};
-
-        for (let [key, value] of Object.entries(newProps)) {
-          if (value !== oldProps[key]) {
-            existing.setAttribute(key, value);
-          }
-        }
-
-        for (let key in oldProps) {
-          if (!(key in newProps)) {
-            existing.removeAttribute(key);
-          }
-        }
-
-        // ถ้ามีลูก และเป็น Element node
-        if (existing.nodeType === Node.ELEMENT_NODE) {
-          const maxLen = Math.max(
-            newNode.children.length,
-            oldNode.children.length
-          );
-
-          for (let i = 0; i < maxLen; i++) {
-            updateElement(
-              existing,
-              newNode.children[i],
-              oldNode.children[i],
-              i
-            );
-          }
+    for (let [k, v] of Object.entries(newProps)) {
+      if (v !== oldProps[k]) {
+        if (k.startsWith("on") && typeof v === "function") {
+          existing[k] = v;
+        } else {
+          existing.setAttribute(k, v);
         }
       }
+    }
 
-      // Initial VDOM
-      let vOld = h("div", { id: "app" },
-        h("h1", null, "Hello"),
-        h("p", null, "Virtual DOM")
+    for (let k in oldProps) {
+      if (!(k in newProps)) {
+        existing.removeAttribute(k);
+      }
+    }
+
+    if (existing.nodeType === Node.ELEMENT_NODE) {
+      const len = Math.max(
+        newNode.children.length,
+        oldNode.children.length
       );
+      for (let i = 0; i < len; i++) {
+        updateElement(existing, newNode.children[i], oldNode.children[i], i);
+      }
+    }
+  }
 
-      const root = document.getElementById("root");
-      const dom = createElement(vOld);
-      root.appendChild(dom); // render แรก
+  // === App logic ===
+  let count = 0;
+  const app = document.getElementById("app");
+  let vOld;
 
-      // เปลี่ยนหลัง 2 วิ
-      setTimeout(() => {
-        const vNew = h("div", { id: "app" },
-          h("h1", null, "Hi!"),
-          h("p", null, "Updated VDOM"),
-          h("small", null, "New line")
-        );
+  function render() {
+    return h("div", { id: "counter" },
+      h("h1", null, `Count: ${count}`),
+      h("button", { onClick: increment }, "Add +1")
+    );
+  }
 
-        updateElement(root, vNew, vOld);
-        vOld = vNew;
-      }, 2000);
-    </script>
-  </body>
-</html>
+  function increment() {
+    count++;
+    const vNew = render();
+    updateElement(app, vNew, vOld);
+    vOld = vNew;
+  }
+
+  // render ครั้งแรก
+  vOld = render();
+  app.appendChild(createElement(vOld));
+</script>
